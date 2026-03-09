@@ -1,0 +1,194 @@
+---
+title: "Visualization Methods in Data Analysis by R"
+subtitle: "Laboratory Works Portfolio -- Group 4, Variant 5"
+author: "Group 4"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 3
+    fig_width: 10
+    fig_height: 6
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  fig.align = "center"
+)
+
+library(conflicted)
+library(tidyverse)
+library(patchwork)
+library(MASS)
+library(palmerpenguins)
+
+conflicts_prefer(dplyr::filter, dplyr::select)
+```
+
+## Introduction
+
+This report is the final portfolio for the course "Visualization Methods in Data Analysis by R" (2026). It contains highlights from all laboratory works (Lab 0--9).
+
+## Lab 0: R Setup and Basics
+
+```{r lab0-speedski}
+library(GDAdata)
+
+ggplot(SpeedSki, aes(Speed, fill = Sex)) +
+  geom_histogram(binwidth = 5, color = "white", alpha = 0.7) +
+  facet_grid(rows = vars(Event)) +
+  labs(title = "Speed Ski: Distribution by Event and Sex",
+       x = "Speed (km/h)", y = "Count") +
+  theme_minimal()
+```
+
+```{r lab0-iris}
+ggplot(iris, aes(Petal.Length, Petal.Width, colour = Species)) +
+  geom_point(size = 2) +
+  labs(title = "Iris: Petal Dimensions by Species") +
+  theme_minimal()
+```
+
+## Lab 1: Exercises from GDA with R
+
+```{r lab1-ch3}
+library(lawstat)
+data(zuni)
+
+q05 <- quantile(zuni$Revenue, 0.05)
+q95 <- quantile(zuni$Revenue, 0.95)
+
+ggplot(zuni, aes(x = Revenue)) +
+  geom_histogram(binwidth = 500, fill = "steelblue", color = "white") +
+  geom_vline(xintercept = c(q05, q95), color = "red", linetype = "dashed") +
+  labs(title = "Zuni: Revenue per Pupil", x = "Revenue ($)", y = "Count") +
+  theme_minimal()
+```
+
+```{r lab1-ch10}
+ggplot(diamonds, aes(x = color, y = price, fill = color)) +
+  geom_boxplot(alpha = 0.7, show.legend = FALSE) +
+  scale_fill_viridis_d() +
+  labs(title = "Diamond Price by Color (confounded by carat)") +
+  theme_minimal()
+```
+
+## Lab 2: autoGEDA
+
+```{r lab2}
+data(penguins)
+penguins_clean <- penguins |> drop_na()
+
+numeric_vars <- penguins_clean |> select(where(is.numeric)) |> names()
+
+plots <- map(numeric_vars, function(var) {
+  ggplot(penguins_clean, aes(x = .data[[var]])) +
+    geom_histogram(fill = "steelblue", color = "white", bins = 25) +
+    labs(title = var) + theme_minimal()
+})
+
+wrap_plots(plots, ncol = 3)
+```
+
+## Lab 3: GEDA + Analytic Questions
+
+```{r lab3-connect}
+ggplot(penguins_clean, aes(bill_length_mm, bill_depth_mm, color = species)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "CONNECT: Bill length vs depth (Simpson's paradox)") +
+  scale_color_brewer(palette = "Set2") +
+  theme_minimal()
+```
+
+```{r lab3-group}
+ggplot(penguins_clean, aes(bill_length_mm, flipper_length_mm,
+                           color = species, shape = species)) +
+  geom_point(size = 2, alpha = 0.7) +
+  stat_ellipse(level = 0.95) +
+  labs(title = "GROUP: Three distinct species clusters") +
+  scale_color_brewer(palette = "Set2") +
+  theme_minimal()
+```
+
+## Lab 4: Heat Map
+
+```{r lab4}
+cor_matrix <- airquality |>
+  select(Ozone, Solar.R, Wind, Temp) |>
+  drop_na() |> cor()
+
+cor_long <- cor_matrix |>
+  as.data.frame() |>
+  rownames_to_column("var1") |>
+  pivot_longer(-var1, names_to = "var2", values_to = "correlation")
+
+ggplot(cor_long, aes(var1, var2, fill = correlation)) +
+  geom_tile(color = "white", size = 1) +
+  geom_text(aes(label = round(correlation, 2)), size = 5) +
+  scale_fill_gradient2(low = "steelblue", mid = "white", high = "coral",
+                       midpoint = 0) +
+  labs(title = "Correlation Heatmap: Air Quality") +
+  theme_minimal() + theme(panel.grid = element_blank()) +
+  coord_fixed()
+```
+
+## Lab 5: The Ugliest Plot
+
+```{r lab5, fig.width=14, fig.height=10}
+ggplot(penguins_clean, aes(bill_length_mm, body_mass_g)) +
+  geom_line(aes(color = flipper_length_mm), size = 2, alpha = 0.5) +
+  geom_point(aes(size = bill_depth_mm), color = "yellow", stroke = 3) +
+  scale_color_gradientn(colors = rainbow(20)) +
+  scale_y_reverse(limits = c(6500, 2500)) +
+  labs(title = "AMAZING PENGUIN ANALYSIS!!!",
+       subtitle = "This proves penguins are DEFINITELY getting bigger*",
+       caption = "*not actually tested") +
+  theme(
+    plot.background = element_rect(fill = "yellow", color = "red", size = 5),
+    panel.background = element_rect(fill = "lavender"),
+    panel.grid.major = element_line(color = "red", size = 1.5),
+    plot.title = element_text(size = 24, color = "purple", face = "bold.italic",
+                              hjust = 0.5)
+  ) +
+  annotate("text", x = 50, y = 4000, label = "WOW!", size = 20,
+           color = "red", alpha = 0.3, angle = 30, fontface = "bold")
+```
+
+## Lab 6: Visualization Recreation
+
+```{r lab6}
+pathogens <- read_csv("../data-I2Rsw.csv") |>
+  rename(pathogen = Pathogen, illnesses = Illnesses,
+         low = `Low Estimate`, high = `High estimate`) |>
+  mutate(pathogen = fct_reorder(pathogen, illnesses))
+
+ggplot(pathogens, aes(y = pathogen)) +
+  geom_segment(aes(x = low, xend = high, yend = pathogen),
+               color = "#D9D9D9", size = 2) +
+  geom_point(aes(x = low), color = "#E87722", size = 3) +
+  geom_point(aes(x = illnesses), color = "#E87722", size = 5) +
+  geom_point(aes(x = high), color = "#E87722", size = 3) +
+  scale_x_continuous(labels = scales::label_number(scale = 1e-6, suffix = "M")) +
+  labs(title = "Foodborne Illness Estimates by Pathogen (CDC 2019)",
+       x = "", y = "") +
+  theme_minimal() + theme(panel.grid.major.y = element_blank())
+```
+
+## Labs 7--9: Munzner Foundations and Color
+
+These labs are completed as separate worksheets covering:
+
+- **Lab 7**: Data Abstraction (What-Why-How framework)
+- **Lab 8**: Marks and Channels, Expressiveness and Effectiveness
+- **Lab 9**: Complexity Families, Color spaces, Color accessibility
+
+## Session Info
+
+```{r}
+sessionInfo()
+```

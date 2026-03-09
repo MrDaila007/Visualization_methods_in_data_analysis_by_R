@@ -1,0 +1,195 @@
+---
+title: "Lab 0: Install R, RStudio + Packages"
+subtitle: "Visualization Methods in Data Analysis by R"
+author: "Group 4, Variant 5"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 2
+    fig_width: 10
+    fig_height: 6
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  fig.align = "center"
+)
+
+library(conflicted)
+library(tidyverse)
+library(patchwork)
+library(MASS)
+
+conflicts_prefer(dplyr::filter, dplyr::select, dplyr::lag)
+```
+
+## 1. Tidyverse Style Guide
+
+Following the [tidyverse style guide](https://style.tidyverse.org/):
+
+- `snake_case` for names
+- `<-` for assignment
+- Spaces around operators
+- Max 80 characters per line
+- `|>` pipe for chaining
+
+## 2. SpeedSki Dataset
+
+```{r speedski}
+library(GDAdata)
+
+glimpse(SpeedSki)
+```
+
+### Histogram of Speed
+
+```{r speedski-hist}
+ggplot(SpeedSki, aes(Speed)) +
+  geom_histogram(binwidth = 5, fill = "steelblue", color = "white") +
+  labs(title = "Distribution of Speed Ski Record Speeds",
+       x = "Speed (km/h)", y = "Count") +
+  theme_minimal()
+```
+
+### Faceted by Sex and Event
+
+```{r speedski-facet}
+ggplot(SpeedSki, aes(Speed, fill = Sex)) +
+  geom_histogram(binwidth = 5, color = "white", alpha = 0.7) +
+  facet_grid(rows = vars(Event)) +
+  labs(title = "Speed Distribution by Event and Sex",
+       x = "Speed (km/h)", y = "Count") +
+  theme_minimal()
+```
+
+### Automated Plotting with purrr + patchwork
+
+```{r speedski-purrr}
+names1 <- levels(SpeedSki$Event)
+
+plot1 <- function(data, var1, var2, var3) {
+  data |>
+    filter({{ var2 }} %in% var3) |>
+    ggplot(aes(x = {{ var1 }})) +
+    geom_histogram(fill = "steelblue", color = "white", binwidth = 5) +
+    labs(title = var3) +
+    theme_minimal()
+}
+
+group1 <- map(names1, ~plot1(SpeedSki, Speed, Event, .x))
+wrap_plots(group1, ncol = 1) & lims(x = c(160, 215), y = c(0, 9))
+```
+
+## 3. Iris Dataset
+
+```{r iris}
+ggplot(iris, aes(Petal.Length, Petal.Width, colour = Species)) +
+  geom_point(size = 2) +
+  labs(title = "Iris: Petal Length vs Petal Width",
+       x = "Petal Length (cm)", y = "Petal Width (cm)") +
+  theme_minimal()
+```
+
+## 4. UCB Admissions
+
+```{r ucb}
+ucb_df <- as.data.frame(UCBAdmissions)
+
+p1 <- ggplot(ucb_df, aes(Dept, weight = Freq)) +
+  geom_bar(fill = "steelblue") +
+  labs(title = "By Department") + theme_minimal()
+p2 <- ggplot(ucb_df, aes(Gender, weight = Freq)) +
+  geom_bar(fill = "coral") +
+  labs(title = "By Gender") + theme_minimal()
+p3 <- ggplot(ucb_df, aes(Admit, weight = Freq)) +
+  geom_bar(fill = "seagreen") +
+  labs(title = "Admission Status") + theme_minimal()
+
+p1 + p2 + p3 + plot_layout(widths = c(3, 1, 1))
+```
+
+## 5. Pima Indians Diabetes
+
+```{r pima-hist, fig.height=8}
+pima_vars <- c("glu", "bp", "skin", "bmi", "ped", "age")
+
+plots_hist <- map(pima_vars, function(var) {
+  ggplot(Pima.tr2, aes(x = .data[[var]])) +
+    geom_histogram(fill = "steelblue", color = "white", bins = 20) +
+    labs(title = var) + theme_minimal()
+})
+
+wrap_plots(plots_hist, ncol = 3)
+```
+
+```{r pima-box}
+plots_box <- map(pima_vars, function(var) {
+  ggplot(Pima.tr2, aes(y = .data[[var]])) +
+    geom_boxplot(fill = "steelblue", alpha = 0.5) +
+    labs(title = var) + theme_minimal()
+})
+
+wrap_plots(plots_box, nrow = 1)
+```
+
+## 6. Titanic
+
+```{r titanic}
+titanic_df <- as.data.frame(Titanic)
+
+tp1 <- ggplot(titanic_df, aes(Class, weight = Freq)) +
+  geom_bar(fill = "steelblue") + theme_minimal()
+tp2 <- ggplot(titanic_df, aes(Sex, weight = Freq)) +
+  geom_bar(fill = "coral") + theme_minimal()
+tp3 <- ggplot(titanic_df, aes(Age, weight = Freq)) +
+  geom_bar(fill = "gold3") + theme_minimal()
+tp4 <- ggplot(titanic_df, aes(Survived, weight = Freq)) +
+  geom_bar(fill = "seagreen") + theme_minimal()
+
+(tp1 + tp2 + tp3 + tp4) +
+  plot_layout(nrow = 1, widths = c(2, 1, 1, 1)) &
+  scale_y_continuous(limits = c(0, 2200))
+```
+
+## 7. Old Faithful Geyser
+
+```{r faithful}
+ggplot(faithful, aes(eruptions, waiting)) +
+  geom_point(alpha = 0.5) +
+  geom_density_2d(color = "steelblue") +
+  labs(title = "Old Faithful: Eruption Duration vs Waiting Time",
+       x = "Eruption duration (min)", y = "Waiting time (min)") +
+  theme_minimal()
+```
+
+## 8. London Bikes
+
+```{r bikes}
+library(readr)
+library(lubridate)
+
+bikes <- read_csv("../london-bikes.csv", col_types = "Dcfffilllddddc",
+                   show_col_types = FALSE)
+
+temp_locale <- Sys.getlocale("LC_TIME")
+Sys.setlocale("LC_TIME", "C")
+
+ggplot(bikes, aes(x = month(date, label = TRUE), y = temp)) +
+  geom_boxplot(fill = "steelblue", alpha = 0.5) +
+  labs(title = "London Bike Sharing: Temperature by Month",
+       x = "Month", y = "Temperature (\u00B0C)") +
+  theme_minimal()
+
+Sys.setlocale("LC_TIME", temp_locale)
+```
+
+## Session Info
+
+```{r}
+sessionInfo()
+```

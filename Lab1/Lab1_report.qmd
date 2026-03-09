@@ -1,0 +1,375 @@
+---
+title: "Lab 1: Exercises from Graphical Data Analysis with R"
+subtitle: "One exercise (Nr. 5) from each chapter 3-11"
+author: "Group 4, Variant 5"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    theme: cosmo
+    code-fold: true
+    code-summary: "Show code"
+    fig-width: 10
+    fig-height: 6
+    embed-resources: true
+execute:
+  warning: false
+  message: false
+---
+
+```{r setup}
+library(conflicted)
+library(tidyverse)
+library(patchwork)
+library(GGally)
+library(MASS)
+
+conflicts_prefer(dplyr::filter, dplyr::select)
+```
+
+## Chapter 3: Zuni Educational Funding
+
+**Dataset:** `zuni` from `lawstat` — 89 school districts in New Mexico with revenue per pupil.
+
+**Task:** Assess whether the lowest/highest 5% of revenue values are extreme; check symmetry and normality of trimmed distribution.
+
+```{r ch3-overview}
+library(lawstat)
+data(zuni)
+
+q05 <- quantile(zuni$revenue, 0.05)
+q95 <- quantile(zuni$revenue, 0.95)
+
+p_hist <- ggplot(zuni, aes(x = revenue)) +
+  geom_histogram(binwidth = 500, fill = "steelblue", color = "white") +
+  geom_vline(xintercept = c(q05, q95), color = "red", linetype = "dashed") +
+  labs(title = "Revenue per Pupil", subtitle = "Red lines: 5th/95th percentiles",
+       x = "Revenue ($)", y = "Count") +
+  theme_minimal()
+
+p_box <- ggplot(zuni, aes(y = revenue)) +
+  geom_boxplot(fill = "steelblue", alpha = 0.5) +
+  labs(title = "Boxplot", y = "Revenue ($)") +
+  theme_minimal()
+
+p_hist + p_box + plot_layout(widths = c(3, 1))
+```
+
+**(a)** The histogram is preferred — it shows the right-skewed shape with a few very high values. The boxplot marks these as outliers but hides the distribution form.
+
+```{r ch3-density}
+zuni_trimmed <- zuni |> filter(revenue >= q05, revenue <= q95)
+
+ggplot(zuni_trimmed, aes(x = revenue)) +
+  geom_histogram(aes(y = after_stat(density)), binwidth = 300,
+                 fill = "steelblue", color = "white", alpha = 0.5) +
+  geom_density(color = "red", linewidth = 1) +
+  labs(title = "Trimmed Distribution (5%-95%)",
+       subtitle = "Roughly symmetric after removing extremes",
+       x = "Revenue ($)", y = "Density") +
+  theme_minimal()
+```
+
+**(b)** After trimming, the distribution looks roughly symmetric.
+
+```{r ch3-qq}
+ggplot(zuni_trimmed, aes(sample = revenue)) +
+  stat_qq(color = "steelblue") +
+  stat_qq_line(color = "red") +
+  labs(title = "Q-Q Plot: Trimmed Revenue",
+       subtitle = "Close to normal with minor tail deviations",
+       x = "Theoretical Quantiles", y = "Sample Quantiles") +
+  theme_minimal()
+```
+
+**(c)** The Q-Q plot shows approximate normality with slight deviations in the tails.
+
+## Chapter 4: Occupational Mobility
+
+**Dataset:** `Yamaguchi87` from `vcdExtra` — occupational mobility tables for UK, US, Japan.
+
+```{r ch4}
+library(vcdExtra)
+data(Yamaguchi87)
+yam_df <- as.data.frame(Yamaguchi87)
+
+sons_by_country <- yam_df |>
+  group_by(Country, Son) |>
+  summarise(n = sum(Freq), .groups = "drop") |>
+  group_by(Country) |>
+  mutate(prop = n / sum(n))
+
+ggplot(sons_by_country, aes(x = Son, y = prop, fill = Country)) +
+  geom_col(position = "dodge") +
+  labs(title = "Sons' Occupations by Country",
+       x = "Occupation", y = "Proportion") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+**(a)** Japan has a distinctive pattern — more farm workers, fewer upper non-manual than UK/US.
+
+```{r ch4-uk}
+uk_data <- yam_df |> filter(Country == "UK")
+
+uk_gen <- bind_rows(
+  uk_data |> group_by(occ = Father) |> summarise(n = sum(Freq), .groups = "drop") |>
+    mutate(gen = "Father"),
+  uk_data |> group_by(occ = Son) |> summarise(n = sum(Freq), .groups = "drop") |>
+    mutate(gen = "Son")
+) |> group_by(gen) |> mutate(prop = n / sum(n))
+
+ggplot(uk_gen, aes(x = occ, y = prop, fill = gen)) +
+  geom_col(position = "dodge") +
+  labs(title = "UK: Fathers' vs Sons' Occupations",
+       subtitle = "Shift from manual to non-manual work across generations",
+       x = "Occupation", y = "Proportion") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+**(b-c)** Clear upward mobility — sons move toward non-manual occupations. Expected given post-war economic development.
+
+## Chapter 5: Bank Sex Discrimination
+
+**Dataset:** `case1202` from `Sleuth2` — employment variables (seniority, age, experience).
+
+```{r ch5}
+library(Sleuth2)
+data(case1202)
+
+case1202 |>
+  select(Senior, Age, Exper) |>
+  ggpairs(
+    lower = list(continuous = wrap("points", alpha = 0.4, color = "steelblue")),
+    diag = list(continuous = wrap("densityDiag", fill = "steelblue", alpha = 0.4)),
+    upper = list(continuous = wrap("cor", size = 5))
+  ) +
+  labs(title = "Scatterplot Matrix: Bank Employment Variables") +
+  theme_minimal()
+```
+
+**(a)** Age and Experience are strongly correlated (both accumulate with time). Senior shows a triangular pattern with Age — you can't have more seniority than years since hiring.
+
+**(b)** Seniority depends on *when* someone was hired, not their total life span. That's why Senior vs Age doesn't show the same linear structure as Experience vs Age.
+
+## Chapter 6: Bodyfat
+
+**Dataset:** `bodyfat` from `mfp` — 252 men with body measurements.
+
+```{r ch6}
+library(mfp)
+data(bodyfat)
+
+ggparcoord(bodyfat, columns = 1:ncol(bodyfat), alpha = 0.08,
+           scale = "uniminmax") +
+  labs(title = "Parallel Coordinate Plot: Bodyfat Data",
+       subtitle = "Scaled to [0,1]. Look for outliers and variable relationships.",
+       x = "Variable", y = "Scaled Value") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8))
+```
+
+**(a)** Several outliers visible — lines that cross extreme values on multiple axes.
+
+**(b)** One case with extremely low height stands out — likely a data entry error (height recorded in cm instead of inches?).
+
+**(c)** Density and bodyfat show a strong inverse relationship — visible as crossing lines between these two adjacent axes.
+
+**(d)** Grouping related circumference measurements together would reveal body type patterns more clearly.
+
+## Chapter 7: Airline Arrivals (Simpson's Paradox)
+
+**Dataset:** Alaska Airlines vs America West at 5 airports.
+
+```{r ch7}
+airline_data <- tibble(
+  airline = rep(c("Alaska", "America West"), each = 5),
+  airport = rep(c("Los Angeles", "Phoenix", "San Diego",
+                  "San Francisco", "Seattle"), 2),
+  on_time = c(497, 221, 212, 503, 1841, 694, 4840, 383, 320, 201),
+  delayed = c(62, 12, 20, 102, 305, 117, 415, 65, 129, 61)
+) |> mutate(total = on_time + delayed, delay_rate = delayed / total)
+
+overall <- airline_data |>
+  group_by(airline) |>
+  summarise(rate = sum(delayed) / sum(total), .groups = "drop")
+
+p_overall <- ggplot(overall, aes(airline, rate, fill = airline)) +
+  geom_col(show.legend = FALSE) +
+  scale_fill_manual(values = c("steelblue", "coral")) +
+  labs(title = "Overall Delay Rate", x = "", y = "Delay Rate") +
+  theme_minimal()
+
+p_by_airport <- ggplot(airline_data, aes(airline, delay_rate, fill = airline)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~airport, nrow = 1) +
+  scale_fill_manual(values = c("steelblue", "coral")) +
+  labs(title = "Delay Rate by Airport",
+       subtitle = "Alaska is better at EVERY airport! (Simpson's Paradox)",
+       x = "", y = "Delay Rate") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+p_overall / p_by_airport
+```
+
+Alaska flies mostly to Seattle (high delay), America West mostly to Phoenix (low delay). Aggregation reverses the per-airport advantage.
+
+## Chapter 8: Pima Indians Overview
+
+**Dataset:** `Pima.tr` + `Pima.te` from `MASS`.
+
+```{r ch8}
+pima_r <- bind_rows(Pima.tr, Pima.te)
+
+pima_long <- pima_r |>
+  pivot_longer(c(glu, bp, skin, bmi, ped, age),
+               names_to = "variable", values_to = "value")
+
+ggplot(pima_long, aes(x = value, fill = type)) +
+  geom_histogram(position = "identity", alpha = 0.5, bins = 30) +
+  facet_wrap(~variable, scales = "free") +
+  scale_fill_manual(values = c("steelblue", "coral")) +
+  labs(title = "Pima Indians: Continuous Variables by Diabetes Type",
+       x = "Value", y = "Count") +
+  theme_minimal()
+```
+
+Diabetic individuals (Yes) tend to have higher glucose, BMI, age, and number of pregnancies.
+
+## Chapter 9: Pearson Heights — Outliers
+
+**Dataset:** `father.son` from `UsingR`.
+
+```{r ch9}
+library(UsingR)
+data(father.son)
+
+p_scatter <- ggplot(father.son, aes(fheight, sheight)) +
+  geom_point(alpha = 0.3, color = "steelblue") +
+  geom_smooth(method = "lm", color = "red", se = TRUE) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "gray50") +
+  labs(title = "Father-Son Heights (Pearson)",
+       subtitle = "Red: linear fit, Dashed: y = x",
+       x = "Father's Height (in)", y = "Son's Height (in)") +
+  theme_minimal()
+
+p_density <- ggplot(father.son, aes(fheight, sheight)) +
+  geom_point(alpha = 0.2, color = "steelblue") +
+  geom_density_2d(color = "red") +
+  labs(title = "With Bivariate Density Contours",
+       subtitle = "Points outside outermost contour = potential outliers",
+       x = "Father's Height (in)", y = "Son's Height (in)") +
+  theme_minimal()
+
+p_scatter + p_density
+```
+
+**(a)** Cases in the corners (short father + tall son, or vice versa) are potential outliers.
+
+**(b)** The density contours identify a slightly different set — bivariate outliers that are far from the main concentration even if not extreme on individual axes.
+
+## Chapter 10: Diamonds — Color vs Price
+
+**Dataset:** `diamonds` from `ggplot2`.
+
+```{r ch10-boxplot}
+ggplot(diamonds, aes(x = color, y = price, fill = color)) +
+  geom_boxplot(alpha = 0.7, show.legend = FALSE) +
+  scale_fill_viridis_d() +
+  labs(title = "Diamond Price by Color (D=best, J=worst)",
+       subtitle = "Surprise: 'worse' colors have higher median prices!",
+       x = "Color", y = "Price ($)") +
+  theme_minimal()
+```
+
+**(a)** This is confounded by carat — worse-colored diamonds tend to be larger. Larger diamonds cost more regardless of color.
+
+```{r ch10-coef}
+model <- lm(log(price) ~ color + log(carat), data = diamonds)
+coef_df <- broom::tidy(model, conf.int = TRUE) |>
+  filter(str_starts(term, "color"))
+
+ggplot(coef_df, aes(x = term, y = estimate, ymin = conf.low, ymax = conf.high)) +
+  geom_pointrange(color = "steelblue", size = 0.8) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+  coord_flip() +
+  labs(title = "Color Coefficients (controlling for carat)",
+       subtitle = "After controlling for size, worse colors DO reduce price",
+       x = "", y = "Coefficient (log price)") +
+  theme_minimal()
+```
+
+**(b)** After controlling for carat, the expected pattern emerges: each step from D toward J decreases price.
+
+## Chapter 11: Bundesliga Goals
+
+**Dataset:** `Bundesliga` from `vcd`.
+
+```{r ch11-trellis}
+library(vcd)
+data(Bundesliga)
+
+bl_summary <- Bundesliga |>
+  mutate(season = ifelse(as.numeric(format(Date, "%m")) >= 7,
+                         as.numeric(format(Date, "%Y")),
+                         as.numeric(format(Date, "%Y")) - 1)) |>
+  group_by(season, HomeTeam) |>
+  summarise(avg_goals = mean(HomeGoals), games = n(), .groups = "drop")
+
+top_teams <- bl_summary |> count(HomeTeam, sort = TRUE) |>
+  filter(n >= 30) |> pull(HomeTeam)
+
+ggplot(bl_summary |> filter(HomeTeam %in% top_teams),
+       aes(season, avg_goals, color = HomeTeam)) +
+  geom_line(alpha = 0.7) +
+  geom_smooth(se = FALSE, linewidth = 0.5) +
+  facet_wrap(~HomeTeam) +
+  labs(title = "Average Home Goals per Game (Bundesliga)",
+       subtitle = "Teams with 30+ seasons. Trellis display handles gaps naturally.",
+       x = "Season", y = "Avg Home Goals") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+**(a)** Trellis display is best — it handles missing years for teams that were relegated. Hamburg is the only ever-present team.
+
+```{r ch11-comparison}
+home_g <- Bundesliga |>
+  mutate(season = ifelse(as.numeric(format(Date, "%m")) >= 7,
+                         as.numeric(format(Date, "%Y")),
+                         as.numeric(format(Date, "%Y")) - 1)) |>
+  filter(HomeTeam %in% c("Hamburger SV", "Bayern Munich")) |>
+  group_by(season, team = HomeTeam) |>
+  summarise(avg = mean(HomeGoals), .groups = "drop") |>
+  mutate(loc = "Home")
+
+away_g <- Bundesliga |>
+  mutate(season = ifelse(as.numeric(format(Date, "%m")) >= 7,
+                         as.numeric(format(Date, "%Y")),
+                         as.numeric(format(Date, "%Y")) - 1)) |>
+  filter(AwayTeam %in% c("Hamburger SV", "Bayern Munich")) |>
+  group_by(season, team = AwayTeam) |>
+  summarise(avg = mean(AwayGoals), .groups = "drop") |>
+  mutate(loc = "Away")
+
+hb <- bind_rows(home_g, away_g)
+
+ggplot(hb, aes(season, avg, color = loc)) +
+  geom_line(alpha = 0.7) +
+  facet_wrap(~team) +
+  scale_color_manual(values = c("steelblue", "coral")) +
+  labs(title = "Home vs Away Scoring: Hamburg & Bayern",
+       x = "Season", y = "Avg Goals/Game", color = "") +
+  theme_minimal()
+```
+
+**(b)** Time series shows trends; a scatterplot would show correlation between home/away performance. Both are informative in different ways.
+
+## Session Info
+
+```{r}
+sessionInfo()
+```

@@ -1,0 +1,279 @@
+---
+title: "Lab 1: Exercises from Graphical Data Analysis with R"
+subtitle: "One exercise (Nr. 5) from each chapter 3--11"
+author: "Group 4, Variant 5"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 2
+    fig_width: 10
+    fig_height: 6
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  fig.align = "center"
+)
+
+library(conflicted)
+library(tidyverse)
+library(patchwork)
+library(MASS)
+
+conflicts_prefer(dplyr::filter, dplyr::select)
+```
+
+## Chapter 3: Zuni Educational Funding
+
+**Dataset:** `zuni` from `lawstat` -- 89 school districts in New Mexico.
+
+```{r ch3-overview}
+library(lawstat)
+data(zuni)
+
+q05 <- quantile(zuni$Revenue, 0.05)
+q95 <- quantile(zuni$Revenue, 0.95)
+
+p_hist <- ggplot(zuni, aes(x = Revenue)) +
+  geom_histogram(binwidth = 500, fill = "steelblue", color = "white") +
+  geom_vline(xintercept = c(q05, q95), color = "red", linetype = "dashed") +
+  labs(title = "Revenue per Pupil", subtitle = "Red: 5th/95th percentiles",
+       x = "Revenue ($)", y = "Count") +
+  theme_minimal()
+
+p_box <- ggplot(zuni, aes(y = Revenue)) +
+  geom_boxplot(fill = "steelblue", alpha = 0.5) +
+  labs(title = "Boxplot", y = "Revenue ($)") +
+  theme_minimal()
+
+p_hist + p_box + plot_layout(widths = c(3, 1))
+```
+
+**(a)** Histogram shows right-skewed shape. **(b)** After trimming to 5--95%, the distribution is roughly symmetric. **(c)** Q-Q plot shows approximate normality.
+
+```{r ch3-qq}
+zuni_trimmed <- zuni |> filter(Revenue >= q05, Revenue <= q95)
+
+ggplot(zuni_trimmed, aes(sample = Revenue)) +
+  stat_qq(color = "steelblue") +
+  stat_qq_line(color = "red") +
+  labs(title = "Q-Q Plot: Trimmed Revenue") +
+  theme_minimal()
+```
+
+## Chapter 4: Occupational Mobility
+
+**Dataset:** `Yamaguchi87` from `vcdExtra` -- UK, US, Japan.
+
+```{r ch4}
+library(vcdExtra)
+data(Yamaguchi87)
+yam_df <- as.data.frame(Yamaguchi87)
+
+sons_by_country <- yam_df |>
+  group_by(Country, Son) |>
+  summarise(n = sum(Freq), .groups = "drop") |>
+  group_by(Country) |>
+  mutate(prop = n / sum(n))
+
+ggplot(sons_by_country, aes(x = Son, y = prop, fill = Country)) +
+  geom_col(position = "dodge") +
+  labs(title = "Sons' Occupations by Country",
+       x = "Occupation", y = "Proportion") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+Japan has more farm workers, fewer upper non-manual. UK shows clear upward mobility across generations.
+
+## Chapter 5: Bank Sex Discrimination
+
+**Dataset:** `case1202` from `Sleuth2`.
+
+```{r ch5}
+library(Sleuth2)
+data(case1202)
+
+bank_vars <- case1202 |> select(Senior, Age, Exper)
+cor_bank <- cor(bank_vars)
+
+cor_long <- cor_bank |>
+  as.data.frame() |>
+  rownames_to_column("var1") |>
+  pivot_longer(-var1, names_to = "var2", values_to = "r")
+
+p_cor <- ggplot(cor_long, aes(var1, var2, fill = r)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = round(r, 2)), size = 5) +
+  scale_fill_gradient2(low = "steelblue", mid = "white", high = "coral", midpoint = 0) +
+  labs(title = "Correlation: Bank Employment Variables") +
+  theme_minimal() + coord_fixed()
+
+p_scatter <- ggplot(case1202, aes(Age, Exper)) +
+  geom_point(alpha = 0.4, color = "steelblue") +
+  labs(title = "Age vs Experience") + theme_minimal()
+
+p_cor + p_scatter
+```
+
+Age and Experience are strongly correlated. Seniority shows a triangular pattern with Age.
+
+## Chapter 6: Bodyfat
+
+**Dataset:** `bodyfat` from `mfp`.
+
+```{r ch6}
+library(mfp)
+data(bodyfat)
+
+# Manual parallel coordinates (scaled 0-1)
+bf_scaled <- bodyfat |>
+  mutate(id = row_number()) |>
+  mutate(across(-id, ~(. - min(., na.rm = TRUE)) / (max(., na.rm = TRUE) - min(., na.rm = TRUE)))) |>
+  pivot_longer(-id, names_to = "variable", values_to = "value")
+
+ggplot(bf_scaled, aes(x = variable, y = value, group = id)) +
+  geom_line(alpha = 0.08, color = "steelblue") +
+  labs(title = "Parallel Coordinate Plot: Bodyfat Data",
+       x = "Variable", y = "Scaled Value [0,1]") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8))
+```
+
+Outliers visible across multiple variables. One case with extremely low height (likely data entry error).
+
+## Chapter 7: Airline Arrivals (Simpson's Paradox)
+
+```{r ch7}
+airline_data <- tibble(
+  airline = rep(c("Alaska", "America West"), each = 5),
+  airport = rep(c("Los Angeles", "Phoenix", "San Diego",
+                  "San Francisco", "Seattle"), 2),
+  on_time = c(497, 221, 212, 503, 1841, 694, 4840, 383, 320, 201),
+  delayed = c(62, 12, 20, 102, 305, 117, 415, 65, 129, 61)
+) |> mutate(total = on_time + delayed, delay_rate = delayed / total)
+
+overall <- airline_data |>
+  group_by(airline) |>
+  summarise(rate = sum(delayed) / sum(total))
+
+p_overall <- ggplot(overall, aes(airline, rate, fill = airline)) +
+  geom_col(show.legend = FALSE) +
+  scale_fill_manual(values = c("steelblue", "coral")) +
+  labs(title = "Overall Delay Rate", x = "", y = "Delay Rate") +
+  theme_minimal()
+
+p_by_airport <- ggplot(airline_data, aes(airline, delay_rate, fill = airline)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~airport, nrow = 1) +
+  scale_fill_manual(values = c("steelblue", "coral")) +
+  labs(title = "Delay Rate by Airport",
+       subtitle = "Alaska is better at EVERY airport! (Simpson's Paradox)") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+p_overall / p_by_airport
+```
+
+## Chapter 8: Pima Indians Overview
+
+```{r ch8}
+pima_r <- bind_rows(Pima.tr, Pima.te)
+
+pima_long <- pima_r |>
+  pivot_longer(c(glu, bp, skin, bmi, ped, age),
+               names_to = "variable", values_to = "value")
+
+ggplot(pima_long, aes(x = value, fill = type)) +
+  geom_histogram(position = "identity", alpha = 0.5, bins = 30) +
+  facet_wrap(~variable, scales = "free") +
+  scale_fill_manual(values = c("steelblue", "coral")) +
+  labs(title = "Pima Indians: Continuous Variables by Diabetes Type") +
+  theme_minimal()
+```
+
+## Chapter 9: Pearson Heights -- Outliers
+
+```{r ch9}
+library(UsingR)
+data(father.son)
+
+p_scatter <- ggplot(father.son, aes(fheight, sheight)) +
+  geom_point(alpha = 0.3, color = "steelblue") +
+  geom_smooth(method = "lm", color = "red", se = TRUE) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "gray50") +
+  labs(title = "Father-Son Heights", x = "Father's Height (in)",
+       y = "Son's Height (in)") +
+  theme_minimal()
+
+p_density <- ggplot(father.son, aes(fheight, sheight)) +
+  geom_point(alpha = 0.2, color = "steelblue") +
+  geom_density_2d(color = "red") +
+  labs(title = "Bivariate Density Contours",
+       x = "Father's Height (in)", y = "Son's Height (in)") +
+  theme_minimal()
+
+p_scatter + p_density
+```
+
+## Chapter 10: Diamonds -- Color vs Price
+
+```{r ch10}
+ggplot(diamonds, aes(x = color, y = price, fill = color)) +
+  geom_boxplot(alpha = 0.7, show.legend = FALSE) +
+  scale_fill_viridis_d() +
+  labs(title = "Diamond Price by Color (D=best, J=worst)",
+       subtitle = "Worse colors have higher prices (confounded by carat)") +
+  theme_minimal()
+```
+
+```{r ch10-coef}
+model <- lm(log(price) ~ color + log(carat), data = diamonds)
+coef_df <- broom::tidy(model, conf.int = TRUE) |>
+  filter(str_starts(term, "color"))
+
+ggplot(coef_df, aes(x = term, y = estimate, ymin = conf.low, ymax = conf.high)) +
+  geom_pointrange(color = "steelblue", size = 0.8) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+  coord_flip() +
+  labs(title = "Color Coefficients (controlling for carat)") +
+  theme_minimal()
+```
+
+## Chapter 11: Bundesliga Goals
+
+```{r ch11, fig.height=8}
+library(vcd)
+data(Bundesliga)
+
+bl_summary <- Bundesliga |>
+  mutate(season = ifelse(as.numeric(format(Date, "%m")) >= 7,
+                         as.numeric(format(Date, "%Y")),
+                         as.numeric(format(Date, "%Y")) - 1)) |>
+  group_by(season, HomeTeam) |>
+  summarise(avg_goals = mean(HomeGoals), games = n(), .groups = "drop")
+
+top_teams <- bl_summary |> count(HomeTeam, sort = TRUE) |>
+  filter(n >= 30) |> pull(HomeTeam)
+
+ggplot(bl_summary |> filter(HomeTeam %in% top_teams),
+       aes(season, avg_goals, color = HomeTeam)) +
+  geom_line(alpha = 0.7) +
+  geom_smooth(se = FALSE, size = 0.5) +
+  facet_wrap(~HomeTeam) +
+  labs(title = "Average Home Goals per Game (Bundesliga)",
+       x = "Season", y = "Avg Home Goals") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+## Session Info
+
+```{r}
+sessionInfo()
+```

@@ -1,0 +1,275 @@
+---
+title: "Lab 4: Heat Map + Table Visualization"
+subtitle: "Visualization Methods in Data Analysis by R"
+author: "Group 4, Variant 5"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 2
+    fig_width: 10
+    fig_height: 6
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  fig.align = "center"
+)
+
+library(conflicted)
+library(tidyverse)
+library(patchwork)
+
+conflicts_prefer(dplyr::filter, dplyr::select)
+```
+
+## Dataset
+
+We use the built-in `airquality` dataset (New York, May--September 1973) with Ozone, Solar Radiation, Wind, and Temperature measurements. This is supplemented with a TidyTuesday-style exploration.
+
+```{r data-prep}
+data(airquality)
+
+aq_matrix <- airquality |>
+  select(Ozone, Solar.R, Wind, Temp) |>
+  drop_na() |>
+  as.matrix() |>
+  scale()
+
+glimpse(airquality)
+```
+
+## Heatmap 1: ggplot2 geom\_tile()
+
+The most flexible approach --- full ggplot2 grammar for customization.
+
+```{r heatmap-tile, fig.height=5}
+ggplot(airquality, aes(x = Day, y = factor(Month, labels = month.abb[5:9]),
+                       fill = Ozone)) +
+  geom_tile(color = "white", size = 0.3) +
+  scale_fill_viridis_c(option = "plasma", na.value = "grey90",
+                       name = "Ozone\n(ppb)") +
+  labs(title = "Daily Ozone Levels (New York, 1973)",
+       subtitle = "Built with ggplot2::geom_tile()",
+       x = "Day of Month", y = "Month") +
+  theme_minimal() +
+  theme(panel.grid = element_blank())
+```
+
+Ozone peaks in July--August. Missing values (grey) are concentrated in June.
+
+## Heatmap 2: Base R heatmap()
+
+Includes dendrograms by default, showing hierarchical clustering.
+
+```{r heatmap-base, fig.height=6}
+heatmap(
+  aq_matrix[1:50, ],
+  col = hcl.colors(50, "YlOrRd", rev = TRUE),
+  scale = "none",
+  main = "Base R heatmap() - Air Quality (first 50 obs)"
+)
+```
+
+## Heatmap 3: pheatmap
+
+Better aesthetics, annotation support, and clustering control than base R.
+
+```{r heatmap-pheatmap, fig.height=7}
+library(pheatmap)
+
+pheatmap(
+  aq_matrix[1:50, ],
+  color = hcl.colors(50, "Viridis"),
+  main = "pheatmap - Air Quality Data (scaled)",
+  fontsize = 10,
+  cluster_rows = TRUE,
+  cluster_cols = TRUE,
+  show_rownames = FALSE
+)
+```
+
+## Heatmap 4: gplots::heatmap.2()
+
+Extended version of base `heatmap()` with color key, density info, and trace lines.
+
+```{r heatmap-gplots, fig.height=7}
+library(gplots)
+
+heatmap.2(
+  aq_matrix[1:50, ],
+  col = hcl.colors(50, "Viridis"),
+  scale = "none",
+  trace = "none",
+  dendrogram = "both",
+  margins = c(8, 4),
+  main = "gplots::heatmap.2() - Air Quality",
+  key.title = "Scaled Value",
+  labRow = FALSE
+)
+```
+
+## Heatmap 5: Correlation Heatmap
+
+```{r heatmap-correlation, fig.height=5, fig.width=7}
+cor_matrix <- airquality |>
+  select(Ozone, Solar.R, Wind, Temp) |>
+  drop_na() |>
+  cor()
+
+cor_long <- cor_matrix |>
+  as.data.frame() |>
+  rownames_to_column("var1") |>
+  pivot_longer(-var1, names_to = "var2", values_to = "correlation")
+
+ggplot(cor_long, aes(x = var1, y = var2, fill = correlation)) +
+  geom_tile(color = "white", size = 1) +
+  geom_text(aes(label = round(correlation, 2)), color = "black", size = 5) +
+  scale_fill_gradient2(low = "steelblue", mid = "white", high = "coral",
+                       midpoint = 0, limits = c(-1, 1)) +
+  labs(title = "Correlation Heatmap - Air Quality Variables",
+       x = "", y = "") +
+  theme_minimal() +
+  theme(panel.grid = element_blank(), axis.text = element_text(size = 12)) +
+  coord_fixed()
+```
+
+Ozone and Temperature: strong positive (r = 0.70). Wind: negatively correlated with both.
+
+## Heatmap 6: Calendar Heatmap
+
+```{r heatmap-calendar, fig.height=4}
+aq_cal <- airquality |>
+  mutate(
+    Date = as.Date(paste(1973, Month, Day, sep = "-")),
+    week = as.numeric(format(Date, "%U")),
+    wday = factor(weekdays(Date, abbreviate = TRUE),
+                  levels = c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"))
+  )
+
+ggplot(aq_cal, aes(x = week, y = fct_rev(wday), fill = Temp)) +
+  geom_tile(color = "white", size = 0.5) +
+  scale_fill_viridis_c(option = "inferno", name = "Temp (\u00B0F)") +
+  labs(title = "Calendar Heatmap: Temperature (May-Sep 1973)",
+       x = "Week of Year", y = "") +
+  theme_minimal() +
+  theme(panel.grid = element_blank())
+```
+
+## Color Interpolation and Class Intervals
+
+Different methods for binning continuous data into classes
+(Lambert & Zanin, *Practical Handbook of Thematic Cartography*, p.49):
+
+- **Linear** (equal intervals): simple, but sensitive to outliers
+- **Quantiles**: each bin has equal count of observations
+- **Natural breaks** (Jenks): minimizes within-class variance
+- **Standard deviation**: bins centered on the mean
+
+Reference: [How to choose an interpolation for your color scale](https://blog.datawrapper.de/interpolation-for-color-scales-and-maps/)
+
+```{r class-intervals, fig.height=5}
+ozone_clean <- na.omit(airquality$Ozone)
+
+# Compare binning methods
+breaks_equal <- seq(min(ozone_clean), max(ozone_clean), length.out = 7)
+breaks_quantile <- quantile(ozone_clean, probs = seq(0, 1, length.out = 7))
+
+p_equal <- ggplot(data.frame(Ozone = ozone_clean), aes(x = Ozone)) +
+  geom_histogram(breaks = breaks_equal, fill = "steelblue", color = "white") +
+  geom_vline(xintercept = breaks_equal, color = "red", linetype = "dashed", size = 0.5) +
+  labs(title = "Equal Intervals", y = "Count") +
+  theme_minimal()
+
+p_quantile <- ggplot(data.frame(Ozone = ozone_clean), aes(x = Ozone)) +
+  geom_histogram(breaks = as.numeric(breaks_quantile),
+                 fill = "coral", color = "white") +
+  geom_vline(xintercept = as.numeric(breaks_quantile),
+             color = "red", linetype = "dashed", size = 0.5) +
+  labs(title = "Quantile Intervals", y = "Count") +
+  theme_minimal()
+
+p_equal + p_quantile +
+  plot_annotation(title = "Class Interval Methods for Ozone Data")
+```
+
+## Table Visualization
+
+### knitr::kable()
+
+The simplest table output for R Markdown / PDF.
+
+```{r table-kable}
+aq_summary <- airquality |>
+  group_by(Month = month.abb[Month]) |>
+  summarise(
+    `Mean Ozone` = round(mean(Ozone, na.rm = TRUE), 1),
+    `Mean Temp` = round(mean(Temp), 1),
+    `Mean Wind` = round(mean(Wind), 1),
+    `Mean Solar` = round(mean(Solar.R, na.rm = TRUE), 1),
+    Days = n(),
+    .groups = "drop"
+  )
+
+knitr::kable(aq_summary, caption = "Air Quality Summary (1973) -- knitr::kable()")
+```
+
+### kableExtra
+
+Enhanced tables with styling, striped rows, and conditional formatting.
+
+```{r table-kableextra}
+library(kableExtra)
+
+aq_summary |>
+  kbl(caption = "Air Quality Summary -- kableExtra") |>
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE,
+    position = "center",
+    latex_options = c("striped", "hold_position")
+  ) |>
+  column_spec(2, bold = TRUE,
+              color = ifelse(aq_summary$`Mean Ozone` > 50, "red", "black")) |>
+  row_spec(0, bold = TRUE, color = "white", background = "#4682B4")
+```
+
+### formattable (concept)
+
+```{r table-formattable}
+library(formattable)
+
+formattable(aq_summary, list(
+  `Mean Ozone` = color_bar("coral"),
+  `Mean Temp` = color_bar("steelblue"),
+  `Mean Wind` = color_tile("white", "seagreen")
+))
+```
+
+## Table Packages Overview
+
+| Package | Static PDF | Interactive HTML | Best For |
+|:--------|:----------:|:---------------:|:---------|
+| `knitr::kable` | Yes | No | Simple tables |
+| `kableExtra` | Yes | Yes | Styled PDF/HTML tables |
+| `gt` | Yes | Yes | Publication-quality tables |
+| `gtExtras` | No | Yes | Sparklines, plots in tables |
+| `DT` | No | Yes | Interactive data exploration |
+| `reactable` | No | Yes | Sorting, filtering, pagination |
+| `formattable` | Partial | Yes | Conditional formatting |
+| `flextable` | Yes | Yes | Word/PowerPoint output |
+
+## Color Palette Notes
+
+- **Sequential** palettes (viridis, plasma, inferno) for ordered continuous data
+- **Diverging** palettes (RdBu, PiYG) for data with meaningful midpoint
+- **Qualitative** palettes (Set2, Dark2) for nominal categories
+- Always use **colorblind-friendly** palettes (viridis family)
+
+```{r session}
+sessionInfo()
+```

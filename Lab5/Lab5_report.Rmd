@@ -1,0 +1,182 @@
+---
+title: "Lab 5: The Ugliest Plot + Visualization Misleaders"
+subtitle: "Visualization Methods in Data Analysis by R"
+author: "Group 4, Variant 5"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 2
+    fig_width: 10
+    fig_height: 6
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  fig.align = "center"
+)
+
+library(conflicted)
+library(tidyverse)
+library(patchwork)
+library(palmerpenguins)
+
+conflicts_prefer(dplyr::filter, dplyr::select)
+
+data(penguins)
+penguins_clean <- penguins |> drop_na()
+```
+
+## The Ugliest Plot Possible
+
+This plot intentionally violates as many visualization principles as possible, based on CALVI's 11 misleaders: inverted axis, rainbow colors, inappropriate geom, cluttered annotations, distorted aspect ratio, and terrible theme choices.
+
+```{r ugly-plot, fig.width=14, fig.height=10}
+ugly_plot <- ggplot(penguins_clean, aes(x = bill_length_mm, y = body_mass_g)) +
+  geom_line(aes(color = flipper_length_mm), size = 2, alpha = 0.5) +
+  geom_point(aes(size = bill_depth_mm), color = "yellow", stroke = 3) +
+  scale_color_gradientn(colors = rainbow(20)) +
+  scale_y_reverse(limits = c(6500, 2500)) +
+  labs(
+    title = "AMAZING PENGUIN ANALYSIS!!!",
+    subtitle = "This proves penguins are DEFINITELY getting bigger*",
+    caption = "*not actually tested"
+  ) +
+  theme(
+    plot.background = element_rect(fill = "yellow", color = "red", size = 5),
+    panel.background = element_rect(fill = "lavender"),
+    panel.grid.major = element_line(color = "red", size = 1.5),
+    plot.title = element_text(size = 24, color = "purple", face = "bold.italic",
+                              hjust = 0.5),
+    axis.title.y = element_text(size = 22, color = "darkgreen", face = "bold"),
+    axis.text.x = element_text(size = 14, color = "red", angle = 60, hjust = 1),
+    legend.background = element_rect(fill = "pink", color = "green", size = 2)
+  ) +
+  annotate("text", x = 50, y = 4000, label = "WOW!", size = 20,
+           color = "red", alpha = 0.3, angle = 30, fontface = "bold")
+
+ugly_plot
+```
+
+### Misleaders used:
+
+1. **Inverted Y-axis** -- reversed scale misleads interpretation
+2. **Rainbow colormap** -- not perceptually uniform, bad for colorblind readers
+3. **Inappropriate geom** -- line chart for non-sequential data
+4. **Cluttered annotations** -- "WOW!" adds zero information
+5. **Terrible color scheme** -- yellow background, red grid, purple title
+6. **Excessive legend styling** -- pink with green border
+7. **Y-axis label** -- huge green bold text, no units
+
+## Misleader Examples
+
+### 1. Truncated Y-Axis
+
+```{r truncated-axis}
+bad_data <- tibble(
+  category = c("Product A", "Product B"),
+  sales = c(98, 102)
+)
+
+p_bad1 <- ggplot(bad_data, aes(category, sales, fill = category)) +
+  geom_col(show.legend = FALSE) +
+  scale_y_continuous(limits = c(95, 105)) +
+  labs(title = "MISLEADING: Truncated Y-axis",
+       subtitle = "Looks like 5x difference, actually ~4%") +
+  scale_fill_manual(values = c("coral", "steelblue")) +
+  theme_minimal()
+
+p_good1 <- ggplot(bad_data, aes(category, sales, fill = category)) +
+  geom_col(show.legend = FALSE) +
+  scale_y_continuous(limits = c(0, 110)) +
+  labs(title = "CORRECT: Y-axis from 0",
+       subtitle = "True proportion visible") +
+  scale_fill_manual(values = c("coral", "steelblue")) +
+  theme_minimal()
+
+p_bad1 + p_good1
+```
+
+### 2. Pie Chart vs Bar Chart
+
+```{r pie-vs-bar}
+pie_data <- tibble(
+  category = LETTERS[1:6],
+  value = c(23, 21, 19, 17, 12, 8)
+)
+
+p_bad2 <- ggplot(pie_data, aes(x = "", y = value, fill = category)) +
+  geom_col(width = 1) +
+  coord_polar("y") +
+  labs(title = "MISLEADING: Pie Chart",
+       subtitle = "Hard to compare similar values") +
+  theme_void()
+
+p_good2 <- ggplot(pie_data, aes(x = reorder(category, value), y = value,
+                                fill = category)) +
+  geom_col(show.legend = FALSE) +
+  coord_flip() +
+  labs(title = "BETTER: Ordered Bar Chart",
+       subtitle = "Easy to compare values", x = "", y = "Value") +
+  theme_minimal()
+
+p_bad2 + p_good2
+```
+
+### 3. Rainbow vs Perceptually Uniform Colormap
+
+```{r rainbow-vs-viridis}
+p_bad3 <- ggplot(faithfuld, aes(waiting, eruptions, fill = density)) +
+  geom_tile() +
+  scale_fill_gradientn(colors = rainbow(7)) +
+  labs(title = "BAD: Rainbow colormap") +
+  theme_minimal()
+
+p_good3 <- ggplot(faithfuld, aes(waiting, eruptions, fill = density)) +
+  geom_tile() +
+  scale_fill_viridis_c() +
+  labs(title = "GOOD: Viridis (perceptually uniform)") +
+  theme_minimal()
+
+p_bad3 + p_good3
+```
+
+## Chart Makeover: Before and After
+
+```{r makeover, fig.width=14}
+p_before <- ggplot(penguins_clean, aes(body_mass_g, flipper_length_mm)) +
+  geom_point(color = "red", size = 5, shape = 17) +
+  labs(title = "penguin data") +
+  theme(
+    plot.background = element_rect(fill = "lightyellow"),
+    panel.background = element_rect(fill = "lightblue"),
+    panel.grid = element_line(color = "red")
+  )
+
+p_after <- ggplot(penguins_clean, aes(body_mass_g, flipper_length_mm,
+                                      color = species)) +
+  geom_point(alpha = 0.7, size = 2) +
+  geom_smooth(method = "lm", se = FALSE, size = 0.8) +
+  scale_color_brewer(palette = "Set2") +
+  labs(title = "Penguin Body Mass vs Flipper Length",
+       subtitle = "Species-specific linear trends",
+       x = "Body Mass (g)", y = "Flipper Length (mm)", color = "Species") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+
+p_before + p_after + plot_annotation(title = "Chart Makeover: Before & After")
+```
+
+## Conclusions
+
+- Visualization misleaders can dramatically distort data interpretation.
+- The most common offenders: truncated axes, pie charts, rainbow colormaps.
+- Good visualization requires: proper scales, clean themes, colorblind-friendly palettes, and appropriate chart types.
+
+```{r session}
+sessionInfo()
+```

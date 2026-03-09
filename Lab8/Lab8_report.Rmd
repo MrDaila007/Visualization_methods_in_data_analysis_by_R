@@ -1,0 +1,185 @@
+---
+title: "Lab 8: Tamara Munzner -- Foundations 2"
+subtitle: "Visualization Methods in Data Analysis by R"
+author: "Group 4, Variant 5"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 2
+    fig_width: 10
+    fig_height: 6
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  fig.align = "center"
+)
+
+library(conflicted)
+library(tidyverse)
+library(patchwork)
+
+conflicts_prefer(dplyr::filter, dplyr::select)
+```
+
+## Part 1: Generate -- Two Numbers
+
+Given two numbers, we explore different visualization encodings ranked by effectiveness.
+
+### Channel Effectiveness (Munzner)
+
+1. Position on common scale (most effective)
+2. Position on unaligned scale
+3. Length
+4. Tilt/Angle
+5. Area
+6. Color luminance
+7. Color saturation
+
+```{r two-numbers}
+two_nums <- tibble(name = c("A", "B"), value = c(73, 42))
+
+# Most effective: position on common scale (bar chart)
+p1 <- ggplot(two_nums, aes(name, value, fill = name)) +
+  geom_col(show.legend = FALSE, width = 0.6) +
+  scale_fill_manual(values = c("steelblue", "coral")) +
+  labs(title = "1. Position (best)", y = "Value", x = "") +
+  theme_minimal()
+
+# Length encoding
+p2 <- ggplot(two_nums, aes(x = value, y = name, fill = name)) +
+  geom_col(show.legend = FALSE, width = 0.5) +
+  scale_fill_manual(values = c("steelblue", "coral")) +
+  labs(title = "2. Length", x = "Value", y = "") +
+  theme_minimal()
+
+# Area encoding (bubble)
+p3 <- ggplot(two_nums, aes(x = name, y = 1, size = value, color = name)) +
+  geom_point(show.legend = FALSE) +
+  scale_size_area(max_size = 25) +
+  scale_color_manual(values = c("steelblue", "coral")) +
+  labs(title = "3. Area (worse)") +
+  theme_void() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Color luminance encoding
+p4 <- ggplot(two_nums, aes(x = name, y = 1, fill = value)) +
+  geom_tile(width = 0.8, height = 0.8, show.legend = TRUE) +
+  geom_text(aes(label = value), size = 8, color = "white") +
+  scale_fill_gradient(low = "gray90", high = "steelblue") +
+  labs(title = "4. Color luminance (worst)") +
+  theme_void() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+(p1 + p2) / (p3 + p4) +
+  plot_annotation(title = "Encoding Two Numbers: Effectiveness Comparison")
+```
+
+Position on a common scale makes it easiest to compare the two values. Area and color luminance make precise comparison much harder.
+
+## Part 2: Marks and Channels Analysis
+
+### Marks (geometric primitives)
+
+- **Points**: 0D marks for individual items
+- **Lines**: 1D marks for connections or trends
+- **Areas**: 2D marks for regions or categories
+
+### Channels (visual variables)
+
+- **Position**: Most effective for quantitative data
+- **Color hue**: Best for categorical data (limited to ~12 categories)
+- **Size**: Moderate effectiveness for quantitative data
+- **Shape**: Categorical only, limited to ~7 distinct shapes
+
+```{r marks-channels, fig.height=8}
+library(palmerpenguins)
+data(penguins)
+penguins_clean <- penguins |> drop_na()
+
+# Demonstrate marks and channels
+p_points <- ggplot(penguins_clean, aes(bill_length_mm, bill_depth_mm)) +
+  geom_point(color = "steelblue", alpha = 0.5) +
+  labs(title = "Marks: Points", subtitle = "Channel: Position (x, y)") +
+  theme_minimal()
+
+p_lines <- ggplot(penguins_clean, aes(bill_length_mm, body_mass_g)) +
+  geom_smooth(aes(color = species), method = "lm", se = FALSE) +
+  labs(title = "Marks: Lines", subtitle = "Channels: Position + Color hue") +
+  scale_color_brewer(palette = "Set2") +
+  theme_minimal()
+
+p_areas <- ggplot(penguins_clean, aes(species, fill = species)) +
+  geom_bar(show.legend = FALSE, alpha = 0.8) +
+  labs(title = "Marks: Areas (bars)", subtitle = "Channels: Position + Length") +
+  theme_minimal()
+
+p_combined <- ggplot(penguins_clean,
+  aes(bill_length_mm, flipper_length_mm,
+      color = species, shape = sex, size = body_mass_g)) +
+  geom_point(alpha = 0.6) +
+  scale_color_brewer(palette = "Set2") +
+  labs(title = "Combined: Multiple channels",
+       subtitle = "Position + Color + Shape + Size") +
+  theme_minimal()
+
+(p_points + p_lines) / (p_areas + p_combined)
+```
+
+## Part 3: Redesign -- New Zealand Table
+
+### Principles for table redesign:
+
+1. **Replace text with visual encodings** where appropriate
+2. **Use position** (bars) for quantitative comparison
+3. **Keep text** for categorical labels
+4. **Add color coding** for quick scanning
+5. **Sort by key metric** for faster lookup
+
+```{r table-redesign}
+library(gt)
+
+# Example: NZ population data (simulated)
+nz_data <- tibble(
+  Region = c("Auckland", "Wellington", "Canterbury", "Waikato",
+             "Bay of Plenty", "Manawatu", "Otago"),
+  Population = c(1717500, 527500, 645900, 496700, 338300, 252300, 245600),
+  Growth = c(2.1, 1.5, 1.2, 1.8, 2.3, 0.8, 1.1),
+  MedianAge = c(34.2, 35.8, 37.1, 36.5, 38.9, 33.2, 36.7)
+) |>
+  arrange(desc(Population))
+
+nz_data |>
+  gt() |>
+  tab_header(
+    title = "New Zealand Regions: Key Demographics",
+    subtitle = "Redesigned from tabular format with visual cues"
+  ) |>
+  fmt_number(columns = Population, suffixing = TRUE) |>
+  fmt_percent(columns = Growth, scale_values = FALSE, decimals = 1) |>
+  data_color(columns = Population, palette = c("white", "steelblue")) |>
+  data_color(columns = Growth, palette = c("white", "seagreen")) |>
+  cols_align(align = "center")
+```
+
+## Expressiveness and Effectiveness Principles
+
+- **Expressiveness**: Encode all and only the information in the data.
+- **Effectiveness**: Use the most effective channels for the most important attributes.
+
+A bar chart is *expressive* (shows the quantitative values) and *effective* (uses position on a common scale, the most effective channel).
+
+## Conclusions
+
+- Position is the most effective channel for quantitative data.
+- Multiple channels can be combined, but avoid overloading (max 3--4 simultaneous channels).
+- Table redesign should replace text-heavy formats with visual encodings where possible.
+
+```{r session}
+sessionInfo()
+```

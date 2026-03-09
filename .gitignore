@@ -1,0 +1,32 @@
+# Textbooks and course materials (large files)
++[Everett,_Mona_]_Graphical_data_analysis_with_R(z-lib.org).pdf
+Module-7-Project.pdf
+chart-type-chooser-chinese-1.pdf
+linting-supplement.pdf
+ggplot_theme_system_cheatsheet.pdf
+ggplot_aesthetics_cheatsheet.png
+
+# HTML task page
+*.html
+*_files/
+
+# R generated
+.Rhistory
+.RData
+.Rproj.user/
+*_cache/
+*_files/
+
+# Intermediate knit files
+*.knit.md
+*.utf8.md
+*.tex
+*.log
+*.aux
+
+# OS
+.DS_Store
+Thumbs.db
+
+# PNG outputs from R scripts (keep PDFs)
+Lab*/*.png

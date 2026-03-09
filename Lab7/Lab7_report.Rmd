@@ -1,0 +1,137 @@
+---
+title: "Lab 7: Tamara Munzner -- Foundations 1"
+subtitle: "Visualization Methods in Data Analysis by R"
+author: "Group 4, Variant 5"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 2
+    fig_width: 10
+    fig_height: 6
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  fig.align = "center"
+)
+
+library(conflicted)
+library(tidyverse)
+library(palmerpenguins)
+
+conflicts_prefer(dplyr::filter, dplyr::select)
+```
+
+## Part 1: Data Abstraction Framework
+
+Munzner's data abstraction identifies four key questions:
+
+1. **What** type of dataset? (table, network, spatial, set)
+2. **What** are the attributes? (categorical, ordered, quantitative)
+3. **Why** is the user looking at it? (discover, present, enjoy)
+4. **How** should it be encoded? (marks and channels)
+
+## Part 2: Palmer Penguins -- Data Abstraction
+
+### Dataset type
+
+**Flat table** -- 344 observations x 8 variables.
+
+### Attribute types
+
+| Variable | Type | Ordering |
+|:---------|:-----|:---------|
+| species | Categorical | Nominal |
+| island | Categorical | Nominal |
+| bill_length_mm | Quantitative | Sequential |
+| bill_depth_mm | Quantitative | Sequential |
+| flipper_length_mm | Quantitative | Sequential |
+| body_mass_g | Quantitative | Sequential |
+| sex | Categorical | Nominal |
+| year | Quantitative | Sequential |
+
+### Demonstration
+
+```{r penguins-abstraction}
+data(penguins)
+penguins_clean <- penguins |> drop_na()
+
+ggplot(penguins_clean, aes(x = bill_length_mm, y = flipper_length_mm,
+                           color = species, size = body_mass_g)) +
+  geom_point(alpha = 0.6) +
+  scale_color_brewer(palette = "Set2") +
+  labs(
+    title = "Palmer Penguins: Multi-channel Encoding",
+    subtitle = "Position (x,y), Color (species), Size (body mass)",
+    x = "Bill Length (mm)", y = "Flipper Length (mm)",
+    size = "Body Mass (g)"
+  ) +
+  theme_minimal()
+```
+
+**Marks**: Points (zero-dimensional).
+**Channels**: Horizontal position (bill length), vertical position (flipper length), color hue (species), size (body mass).
+
+## Part 3: Foreign Aid Dataset
+
+Foreign aid data typically involves:
+
+- **Dataset type**: Table (with potential network structure between donor--recipient)
+- **Items**: Country-year pairs
+- **Attributes**: Aid amount (quantitative), donor/recipient (categorical), year (ordered), sector (categorical)
+
+### Key design decisions
+
+1. **Task**: Compare aid amounts across donors and recipients over time
+2. **Encoding**: Position on common scale (bar chart) is most effective for quantitative comparison
+3. **Faceting**: By donor or region to manage complexity
+4. **Color**: Sequential palette for amounts, qualitative for categories
+
+```{r foreign-aid-example}
+# Simulated foreign aid data for illustration
+set.seed(42)
+aid_data <- expand_grid(
+  donor = c("USA", "UK", "Germany", "France", "Japan"),
+  year = 2015:2020
+) |>
+  mutate(
+    aid_billion = case_when(
+      donor == "USA" ~ rnorm(n(), 35, 3),
+      donor == "UK" ~ rnorm(n(), 18, 2),
+      donor == "Germany" ~ rnorm(n(), 24, 2.5),
+      donor == "France" ~ rnorm(n(), 12, 1.5),
+      donor == "Japan" ~ rnorm(n(), 15, 2)
+    )
+  )
+
+ggplot(aid_data, aes(x = year, y = aid_billion, color = donor)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  scale_color_brewer(palette = "Set2") +
+  labs(title = "Foreign Aid by Donor Country (Simulated)",
+       x = "Year", y = "Aid (Billion USD)", color = "Donor") +
+  theme_minimal()
+```
+
+## Munzner's What-Why-How Framework Summary
+
+| Component | Question | Penguins Example |
+|:----------|:---------|:-----------------|
+| **What** | Data type? | Flat table, 8 attributes |
+| **Why** | User task? | Discover clusters, compare species |
+| **How** | Encoding? | Scatterplot with color + size channels |
+
+## Conclusions
+
+- Data abstraction is the first step in visualization design.
+- Identifying attribute types (categorical vs. quantitative) determines which channels are appropriate.
+- Munzner's framework provides a systematic approach to visualization design.
+
+```{r session}
+sessionInfo()
+```
